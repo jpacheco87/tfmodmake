@@ -761,6 +761,9 @@ func generateBaseModule(ctx context.Context, specSources []string, resourceType,
 
 // runGenAWS generates an AWS Terraform module from the AWS provider schema
 func runGenAWS(ctx context.Context, cmd *cli.Command) error {
+	// ctx is accepted for consistency with other command handlers and can be used
+	// in the future to add cancellation or timeouts to schema loading and generation.
+	_ = ctx
 	resourceType := cmd.String("resource")
 	region := cmd.String("region")
 	outputDir := cmd.String("output")
