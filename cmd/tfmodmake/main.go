@@ -778,7 +778,7 @@ func runGenAWS(ctx context.Context, cmd *cli.Command) error {
 	fmt.Fprintf(os.Stderr, "Loading AWS provider schema from %s...\n", terraformDir)
 	schemas, err := awsschema.LoadSchema(terraformDir)
 	if err != nil {
-		return fmt.Errorf("failed to load AWS provider schema: %w\nMake sure terraform is initialized with AWS provider in %s", err, terraformDir)
+		return fmt.Errorf("failed to load AWS provider schema from terraform dir %q: %w", terraformDir, err)
 	}
 
 	// Find the resource schema
