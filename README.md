@@ -25,6 +25,31 @@ go build -o tfmodmake ./cmd/tfmodmake
 
 ## Usage
 
+tfmodmake supports two modes:
+
+1. **Azure (OpenAPI-based)**: Generate modules for Azure resources using OpenAPI specifications
+2. **AWS (Provider schema-based)**: Generate modules for AWS resources using Terraform AWS provider schema
+
+### AWS Module Generation
+
+See [AWS_USAGE.md](AWS_USAGE.md) for complete AWS documentation.
+
+Quick example:
+
+```bash
+# Generate AWS S3 bucket module
+./tfmodmake gen-aws --resource aws_s3_bucket --region us-east-1
+
+# Generate AWS Lambda function module
+./tfmodmake gen-aws --resource aws_lambda_function --region us-west-2
+```
+
+### Azure Module Generation
+
+Below are the Azure-specific commands (original functionality):
+
+## Usage
+
 ### Base Module Generation
 
 Generate a base Terraform module:

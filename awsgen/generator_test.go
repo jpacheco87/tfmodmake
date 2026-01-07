@@ -115,6 +115,11 @@ func TestGenerateAWSInstance(t *testing.T) {
 	mainContent, err := os.ReadFile(filepath.Join(tmpDir, "main.tf"))
 	require.NoError(t, err)
 	assert.Contains(t, string(mainContent), "resource \"aws_instance\" \"this\"")
+	// Check for common instance attributes (not deprecated ones)
 	assert.Contains(t, string(mainContent), "ami")
 	assert.Contains(t, string(mainContent), "instance_type")
+	
+	// Verify we're not including computed-only or provider-managed attributes
+	assert.NotContains(t, string(mainContent), "id =")
+	assert.NotContains(t, string(mainContent), "arn =")
 }
