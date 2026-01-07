@@ -16,10 +16,26 @@ func generateVariables(schema *awsschema.ResourceSchema, resourceType, outputDir
 	file := hclwrite.NewEmptyFile()
 	body := file.Body()
 
-	// Get all writable attributes sorted by name
+	// Get all truly writable attributes (required or optional, but not computed-only)
+	// Skip: computed-only (computed=true, required=false, optional=false)
+	// Skip: optional+computed that are typically managed by provider (id, tags_all, etc.)
 	var attrNames []string
 	for name, attr := range schema.Block.Attributes {
-		if attr.IsWritable() && !attr.Deprecated {
+		if attr.Deprecated {
+			continue
+		}
+		// Skip computed-only attributes
+		if attr.Computed && !attr.Optional && !attr.Required {
+			continue
+		}
+		// Skip common provider-managed computed attributes even if optional
+		if attr.Computed && attr.Optional {
+			// Common AWS provider-managed attributes
+			if name == "id" || name == "arn" || name == "tags_all" {
+				continue
+			}
+		}
+		if attr.IsWritable() {
 			attrNames = append(attrNames, name)
 		}
 	}
@@ -36,8 +52,8 @@ func generateVariables(schema *awsschema.ResourceSchema, resourceType, outputDir
 		varBlock := body.AppendNewBlock("variable", []string{name})
 		varBody := varBlock.Body()
 
-		// Set type
-		varBody.SetAttributeValue("type", cty.StringVal(getTerraformType(attr)))
+		// Set type (use raw tokens for unquoted type)
+		varBody.SetAttributeRaw("type", hclwrite.TokensForIdentifier(getTerraformType(attr)))
 
 		// Set description
 		if attr.Description != "" {
@@ -62,45 +78,9 @@ func generateVariables(schema *awsschema.ResourceSchema, resourceType, outputDir
 		}
 	}
 
-	// Generate variables for block types
-	var blockNames []string
-	for name := range schema.Block.BlockTypes {
-		blockNames = append(blockNames, name)
-	}
-	sort.Strings(blockNames)
-
-	for _, name := range blockNames {
-		body.AppendNewline()
-		
-		blockType := schema.Block.BlockTypes[name]
-		
-		varBlock := body.AppendNewBlock("variable", []string{name})
-		varBody := varBlock.Body()
-
-		// Nested blocks are typically represented as list(object) or set(object)
-		typeStr := "list(any)"
-		if blockType.NestingMode == "set" {
-			typeStr = "set(any)"
-		} else if blockType.MaxItems == 1 {
-			typeStr = "object(any)"
-		}
-		varBody.SetAttributeValue("type", cty.StringVal(typeStr))
-
-		desc := blockType.Block.Description
-		if desc == "" {
-			desc = fmt.Sprintf("Configuration for %s", name)
-		}
-		varBody.SetAttributeValue("description", cty.StringVal(desc))
-
-		// Default to empty for optional blocks
-		if blockType.MinItems == 0 {
-			if blockType.MaxItems == 1 {
-				varBody.SetAttributeValue("default", cty.NullVal(cty.DynamicPseudoType))
-			} else {
-				varBody.SetAttributeValue("default", cty.ListValEmpty(cty.DynamicPseudoType))
-			}
-		}
-	}
+	// Note: We're intentionally not generating variables for block types
+	// as they have complex nested structures that are better handled manually
+	// Users can add these as needed
 
 	return hclgen.WriteFileToDir(outputDir, "variables.tf", file)
 }

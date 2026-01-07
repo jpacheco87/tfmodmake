@@ -3,7 +3,6 @@ package awsgen
 import (
 	"sort"
 
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/matt-FFFFFF/tfmodmake/awsschema"
 	"github.com/matt-FFFFFF/tfmodmake/hclgen"
@@ -18,10 +17,26 @@ func generateMain(schema *awsschema.ResourceSchema, resourceType, outputDir stri
 	resourceBlock := body.AppendNewBlock("resource", []string{resourceType, "this"})
 	resourceBody := resourceBlock.Body()
 
-	// Get all writable attributes sorted by name
+	// Get all truly writable attributes (required or optional, but not computed-only)
+	// Skip: computed-only (computed=true, required=false, optional=false)
+	// Skip: optional+computed that are typically managed by provider (id, tags_all, etc.)
 	var attrNames []string
 	for name, attr := range schema.Block.Attributes {
-		if attr.IsWritable() && !attr.Deprecated {
+		if attr.Deprecated {
+			continue
+		}
+		// Skip computed-only attributes
+		if attr.Computed && !attr.Optional && !attr.Required {
+			continue
+		}
+		// Skip common provider-managed computed attributes even if optional
+		if attr.Computed && attr.Optional {
+			// Common AWS provider-managed attributes
+			if name == "id" || name == "arn" || name == "tags_all" {
+				continue
+			}
+		}
+		if attr.IsWritable() {
 			attrNames = append(attrNames, name)
 		}
 	}
@@ -32,60 +47,9 @@ func generateMain(schema *awsschema.ResourceSchema, resourceType, outputDir stri
 		resourceBody.SetAttributeRaw(name, hclgen.TokensForTraversal("var", name))
 	}
 
-	// Add dynamic blocks for nested block types
-	var blockNames []string
-	for name := range schema.Block.BlockTypes {
-		blockNames = append(blockNames, name)
-	}
-	sort.Strings(blockNames)
-
-	for _, name := range blockNames {
-		blockType := schema.Block.BlockTypes[name]
-		
-		// Create dynamic block
-		dynBlock := resourceBody.AppendNewBlock("dynamic", []string{name})
-		dynBody := dynBlock.Body()
-
-		// for_each determines when to create the block
-		if blockType.MaxItems == 1 {
-			// Single block: for_each on non-null variable
-			dynBody.SetAttributeRaw("for_each", hclwrite.Tokens{
-				{Type: hclsyntax.TokenIdent, Bytes: []byte("var")},
-				{Type: hclsyntax.TokenDot, Bytes: []byte(".")},
-				{Type: hclsyntax.TokenIdent, Bytes: []byte(name)},
-				{Type: hclsyntax.TokenEqualOp, Bytes: []byte(" != ")},
-				{Type: hclsyntax.TokenIdent, Bytes: []byte("null")},
-				{Type: hclsyntax.TokenQuestion, Bytes: []byte(" ? ")},
-				{Type: hclsyntax.TokenOBrack, Bytes: []byte("[")},
-				{Type: hclsyntax.TokenIdent, Bytes: []byte("var")},
-				{Type: hclsyntax.TokenDot, Bytes: []byte(".")},
-				{Type: hclsyntax.TokenIdent, Bytes: []byte(name)},
-				{Type: hclsyntax.TokenCBrack, Bytes: []byte("]")},
-				{Type: hclsyntax.TokenColon, Bytes: []byte(" : ")},
-				{Type: hclsyntax.TokenOBrack, Bytes: []byte("[")},
-				{Type: hclsyntax.TokenCBrack, Bytes: []byte("]")},
-			})
-		} else {
-			// Multiple blocks: for_each on variable (list/set)
-			dynBody.SetAttributeRaw("for_each", hclgen.TokensForTraversal("var", name))
-		}
-
-		// content block - just pass through all attributes from the iterator
-		contentBlock := dynBody.AppendNewBlock("content", nil)
-		contentBody := contentBlock.Body()
-
-		// For simplicity, set content as the iterator value
-		// In a real implementation, we'd map each attribute in the block
-		var attrNamesInBlock []string
-		for attrName := range blockType.Block.Attributes {
-			attrNamesInBlock = append(attrNamesInBlock, attrName)
-		}
-		sort.Strings(attrNamesInBlock)
-
-		for _, attrName := range attrNamesInBlock {
-			contentBody.SetAttributeRaw(attrName, hclgen.TokensForTraversal(name, "value", attrName))
-		}
-	}
+	// Note: We're intentionally not generating dynamic blocks for nested configurations
+	// as they can have complex nested requirements. Users can add these manually as needed
+	// or we can generate them in a future enhancement with proper schema introspection.
 
 	return hclgen.WriteFileToDir(outputDir, "main.tf", file)
 }
