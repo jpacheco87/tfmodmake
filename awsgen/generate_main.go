@@ -1,8 +1,6 @@
 package awsgen
 
 import (
-	"sort"
-
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/matt-FFFFFF/tfmodmake/awsschema"
 	"github.com/matt-FFFFFF/tfmodmake/hclgen"
@@ -17,30 +15,8 @@ func generateMain(schema *awsschema.ResourceSchema, resourceType, outputDir stri
 	resourceBlock := body.AppendNewBlock("resource", []string{resourceType, "this"})
 	resourceBody := resourceBlock.Body()
 
-	// Get all truly writable attributes (required or optional, but not computed-only)
-	// Skip: computed-only (computed=true, required=false, optional=false)
-	// Skip: optional+computed that are typically managed by provider (id, tags_all, etc.)
-	var attrNames []string
-	for name, attr := range schema.Block.Attributes {
-		if attr.Deprecated {
-			continue
-		}
-		// Skip computed-only attributes
-		if attr.Computed && !attr.Optional && !attr.Required {
-			continue
-		}
-		// Skip common provider-managed computed attributes even if optional
-		if attr.Computed && attr.Optional {
-			// Common AWS provider-managed attributes
-			if name == "id" || name == "arn" || name == "tags_all" {
-				continue
-			}
-		}
-		if attr.IsWritable() {
-			attrNames = append(attrNames, name)
-		}
-	}
-	sort.Strings(attrNames)
+	// Get writable attributes using helper function
+	attrNames := getWritableAttributes(schema)
 
 	// Set each attribute to its corresponding variable
 	for _, name := range attrNames {
