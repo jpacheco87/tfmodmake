@@ -117,6 +117,40 @@ gen-aws: build
 	./tfmodmake gen-aws --resource $(RESOURCE) --region $(REGION) --output $(OUTPUT_DIR)/$(RESOURCE) --terraform-dir $(AWS_SCHEMA_DIR)
 	@echo "✓ Generated $(RESOURCE) module in $(OUTPUT_DIR)/$(RESOURCE)"
 
+# Validate generated AWS modules with terraform validate
+.PHONY: validate-generated
+validate-generated:
+	@echo "Validating generated AWS modules..."
+	@if [ ! -d "$(OUTPUT_DIR)" ]; then \
+		echo "Error: No generated modules found in $(OUTPUT_DIR)"; \
+		echo "Run a generation command first (e.g., make gen-aws-s3)"; \
+		exit 1; \
+	fi
+	@failed=0; \
+	for dir in $(OUTPUT_DIR)/*/; do \
+		if [ -d "$$dir" ]; then \
+			echo "Validating $$dir..."; \
+			cd "$$dir" && \
+			terraform init -backend=false -upgrade=false > /dev/null 2>&1 && \
+			terraform validate > /dev/null 2>&1; \
+			if [ $$? -eq 0 ]; then \
+				echo "  ✓ Valid"; \
+			else \
+				echo "  ✗ Failed validation"; \
+				failed=$$((failed + 1)); \
+			fi; \
+			cd - > /dev/null; \
+		fi; \
+	done; \
+	if [ $$failed -gt 0 ]; then \
+		echo ""; \
+		echo "✗ $$failed module(s) failed validation"; \
+		exit 1; \
+	else \
+		echo ""; \
+		echo "✓ All generated modules are valid"; \
+	fi
+
 # Clean generated output
 .PHONY: clean
 clean:
@@ -158,6 +192,7 @@ help:
 	@echo "  REGION=us-west-2        Change AWS region (default: us-east-1)"
 	@echo ""
 	@echo "Utility:"
+	@echo "  make validate-generated Validate all generated modules with terraform validate"
 	@echo "  make clean              Clean generated output and binary"
 	@echo "  make help               Show this help message"
 	@echo ""
