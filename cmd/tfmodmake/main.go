@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/matt-FFFFFF/tfmodmake/awsgen"
+	"github.com/matt-FFFFFF/tfmodmake/awsschema"
 	"github.com/matt-FFFFFF/tfmodmake/naming"
 	"github.com/matt-FFFFFF/tfmodmake/openapi"
 	specpkg "github.com/matt-FFFFFF/tfmodmake/specs"
@@ -210,6 +212,32 @@ func main() {
 						Action: runDiscoverChildren,
 					},
 				},
+			},
+			{
+				Name:  "gen-aws",
+				Usage: "Generate AWS Terraform module",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "resource",
+						Usage:    "AWS resource type (e.g., aws_s3_bucket, aws_instance)",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "region",
+						Usage: "AWS region (optional, e.g., us-east-1)",
+					},
+					&cli.StringFlag{
+						Name:  "output",
+						Usage: "Output directory (default: current directory)",
+						Value: ".",
+					},
+					&cli.StringFlag{
+						Name:  "terraform-dir",
+						Usage: "Directory with initialized Terraform AWS provider (default: /tmp/terraform-aws-test)",
+						Value: "/tmp/terraform-aws-test",
+					},
+				},
+				Action: runGenAWS,
 			},
 		},
 		DefaultCommand: "gen",
@@ -729,4 +757,56 @@ func generateBaseModule(ctx context.Context, specSources []string, resourceType,
 
 	// Generate Terraform files
 	return terraform.Generate(schema, resourceType, finalLocalName, apiVersion, supportsTags, supportsLocation, nameSchema, doc)
+}
+
+// runGenAWS generates an AWS Terraform module from the AWS provider schema
+func runGenAWS(ctx context.Context, cmd *cli.Command) error {
+	resourceType := cmd.String("resource")
+	region := cmd.String("region")
+	outputDir := cmd.String("output")
+	terraformDir := cmd.String("terraform-dir")
+
+	// Validate resource type
+	if !strings.HasPrefix(resourceType, "aws_") {
+		return fmt.Errorf("resource type must start with 'aws_' (e.g., aws_s3_bucket, aws_instance)")
+	}
+
+	// Load AWS provider schema
+	fmt.Fprintf(os.Stderr, "Loading AWS provider schema from %s...\n", terraformDir)
+	schemas, err := awsschema.LoadSchema(terraformDir)
+	if err != nil {
+		return fmt.Errorf("failed to load AWS provider schema: %w\nMake sure terraform is initialized with AWS provider in %s", err, terraformDir)
+	}
+
+	// Find the resource schema
+	schema, err := awsschema.FindResource(schemas, resourceType)
+	if err != nil {
+		return fmt.Errorf("failed to find resource %s: %w", resourceType, err)
+	}
+
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Generate the module
+	fmt.Fprintf(os.Stderr, "Generating AWS module for %s...\n", resourceType)
+	opts := awsgen.GenerateOptions{
+		ResourceType: resourceType,
+		OutputDir:    outputDir,
+		Region:       region,
+	}
+
+	if err := awsgen.Generate(schema, opts); err != nil {
+		return fmt.Errorf("failed to generate module: %w", err)
+	}
+
+	fmt.Printf("Successfully generated AWS module for %s in %s\n", resourceType, outputDir)
+	fmt.Println("\nGenerated files:")
+	fmt.Println("  - terraform.tf")
+	fmt.Println("  - variables.tf")
+	fmt.Println("  - main.tf")
+	fmt.Println("  - outputs.tf")
+
+	return nil
 }
