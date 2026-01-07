@@ -34,7 +34,7 @@ func TestGetResourceName(t *testing.T) {
 		expected     string
 	}{
 		{"S3 Bucket", "aws_s3_bucket", "bucket"},
-		{"EC2 Instance", "aws_instance", ""},
+		{"Single word resource (aws_instance)", "aws_instance", ""},
 		{"Lambda Function", "aws_lambda_function", "function"},
 	}
 
