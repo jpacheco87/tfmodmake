@@ -25,6 +25,31 @@ go build -o tfmodmake ./cmd/tfmodmake
 
 ## Usage
 
+tfmodmake supports two modes:
+
+1. **Azure (OpenAPI-based)**: Generate modules for Azure resources using OpenAPI specifications
+2. **AWS (Provider schema-based)**: Generate modules for AWS resources using Terraform AWS provider schema
+
+### AWS Module Generation
+
+See [AWS_USAGE.md](AWS_USAGE.md) for complete AWS documentation.
+
+Quick example:
+
+```bash
+# Generate AWS S3 bucket module
+./tfmodmake gen-aws --resource aws_s3_bucket --region us-east-1
+
+# Generate AWS Lambda function module
+./tfmodmake gen-aws --resource aws_lambda_function --region us-west-2
+```
+
+### Azure Module Generation
+
+Below are the Azure-specific commands (original functionality):
+
+## Usage
+
 ### Base Module Generation
 
 Generate a base Terraform module:
@@ -310,3 +335,92 @@ Filtered out
 ```
 
 Other discovery options (details in [docs/children-discovery.md](docs/children-discovery.md)):
+
+## Troubleshooting
+
+### AWS Module Generation Issues
+
+#### "terraform providers schema failed"
+- **Cause**: Terraform is not installed or not in PATH
+- **Solution**: 
+  Install Terraform from the official site: https://developer.hashicorp.com/terraform/install
+  
+  For example, on Linux (amd64):
+  ```bash
+  # Replace VERSION with the latest version from the official site
+  VERSION="1.10.5"
+  wget https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip
+  unzip terraform_${VERSION}_linux_amd64.zip
+  sudo mv terraform /usr/local/bin/
+  terraform version
+  ```
+- **Makefile users**: Run `make setup-aws-schema` after installing Terraform
+
+#### "AWS provider not found in schema"
+- **Cause**: The schema directory is not initialized with the AWS provider
+- **Solution**:
+  ```bash
+  # Using Makefile (recommended)
+  make setup-aws-schema
+  
+  # Or manually
+  cd /tmp/terraform-aws-test
+  terraform init
+  ```
+
+#### "failed to load AWS provider schema"
+- **Cause**: The Terraform working directory doesn't exist or isn't initialized
+- **Solution**:
+  ```bash
+  # Clean and reinitialize
+  rm -rf /tmp/terraform-aws-test
+  make setup-aws-schema
+  ```
+
+#### Generated module fails `terraform validate`
+- **Cause**: AWS provider schema may have changed
+- **Solution**: Refresh the schema
+  ```bash
+  rm -rf /tmp/terraform-aws-test/.terraform*
+  cd /tmp/terraform-aws-test && terraform init
+  ```
+
+#### "Invalid resource type" error
+- **Cause**: Resource type doesn't exist in AWS provider
+- **Solution**: 
+  - Verify the resource type exists: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+  - Ensure correct format: `aws_<service>_<resource>` (e.g., `aws_s3_bucket`, not `s3_bucket`)
+  - Check for typos in the resource name
+
+#### Schema loading is slow
+- **Expected behavior**: First run takes 10-30 seconds to load the AWS provider schema
+- **Solution**: Schema is loaded once per generation. Use `make gen-aws-all` to generate multiple modules in one session.
+
+### Azure Module Generation Issues
+
+For Azure-specific troubleshooting, see the existing documentation above.
+
+### General Issues
+
+#### Build errors
+```bash
+# Ensure dependencies are up to date
+go mod tidy
+go mod download
+
+# Clean and rebuild
+rm -f tfmodmake
+make build
+```
+
+#### Test failures
+```bash
+# Run tests with verbose output
+go test -v ./...
+
+# Run specific package tests
+go test -v ./awsgen
+go test -v ./awsschema
+```
+
+For more help, open an issue at: https://github.com/matt-FFFFFF/tfmodmake/issues
